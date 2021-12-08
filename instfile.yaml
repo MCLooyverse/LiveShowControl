@@ -1,0 +1,33 @@
+- name: Spotlight
+  addr: 181
+  channels:
+    - name: Pan[1]  # Meaningful.  Controller will interpret as byte 1 of pan
+      target: pan
+      values:
+        type: range   # Also the default if not given.
+        min: -300 # -300 degrees
+        max:  300 #  300 degrees
+        # TODO: Verify
+    - name: Pan[0]
+    - name: Tilt[1]
+      target: tilt
+      values:
+        min: -15 # -15 degrees
+        max: 190 # 190 degrees
+        # TODO: Verify
+    - name: Tilt[0]
+      target: tilt
+    - name: Color
+      target: color
+      values:
+        type: discrete
+        white: [ 0, 10 ]
+        # TODO: Find values
+    - name: Gobo
+      values:
+        type: discrete
+        circle: [ 0, 20 ]
+        # TODO: Find values
+    - name: Strobe
+    - name: Brightness
+      target: master

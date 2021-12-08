@@ -1,0 +1,2 @@
+#!/bin/sh
+g++ -DCOMPILE_TIME_PWD="\"$(pwd)\"" -c interface.cpp -std=c++20 -g -Wno-narrowing -lyaml-cpp
