@@ -4,6 +4,8 @@
 using namespace std::literals::chrono_literals;
 using Clock = std::chrono::steady_clock;
 #include <string>
+#include <vector>
+#include <map>
 #include <termios.h>
 #include <cerrno>
 #include <cstring>
@@ -11,12 +13,38 @@ using Clock = std::chrono::steady_clock;
 namespace fs = std::filesystem;
 
 
+
 using byte = unsigned char;
 
 constexpr auto kMinRefr = 20ms;
 
+struct State
+{
+	struct Fader
+	{
+		std::chrono::time_point<Clock> upd;
+		float vel; //DMX points per ms
+		byte  tgt;
+	};
+
+	byte slots[513];
+	std::map<size_t, Fader> faders;
+	bool updated;
+
+	State() : slots{0}, faders{}, updated{1} { }
+};
+
 bool continueLine(int, std::string&, std::chrono::microseconds maxt = 5ms);
-std::string doCommand(const std::string&, byte (&slots)[513]);
+std::string doCommand(const std::string&, State&);
+
+template <typename T> inline constexpr
+int sgn(T x)
+{ return (T{0} < x) - (x < T{0}); }
+template <typename DT, typename DF>
+inline constexpr typename DT::rep numberOf(DF d)
+{ return std::chrono::duration_cast<DT>(d).count(); }
+
+
 
 
 
@@ -45,43 +73,53 @@ int main(int argc, char** argv)
 		std::string dynerrstr = strerror(errno);
 		dynerrstr += '\n';
 		write(2, dynerrstr.c_str(), dynerrstr.size());
+		return 1;
 	}
 
-	bool updated = 1;
 	std::string comm;
 	std::string errstr;
-	byte slots[513]{0};
+	State state;
 	auto lastWrite = Clock::now();
-	for(int linec = 0;;)
+	for(;;)
 	{
 		if (continueLine(0, comm) && comm.size())
 		{
-			errstr = doCommand(comm, slots);
+			errstr = doCommand(comm, state);
 			if (errstr.size())
 			{
 				errstr += '\n';
 				write(2, errstr.c_str(), errstr.size());
-				/*errstr = "in line " + std::to_string(linec) + " of length "
-					+ std::to_string(comm.size()) + "\n";
-				write(2, errstr.c_str(), errstr.size());*/
-			}
-			else
-			{
-				/*
-				errstr = "line " + std::to_string(linec) + " of length "
-					+ std::to_string(comm.size()) + " successful\n";
-					*/
-				write(2, errstr.c_str(), errstr.size());
-				updated = 1;
 			}
 			comm.clear();
-			++linec;
 		}
 
-		if (updated || lastWrite + kMinRefr <= Clock::now())
+		std::erase_if(
+			state.faders,
+			[&state](const auto& p) -> bool
+			{ return p.second.tgt == state.slots[p.first+1]; }
+		);
+
+		for (auto& [idx, fader] : state.faders)
 		{
-			updated = 0;
-			write(dev, slots, 513);
+			int delta = numberOf<std::chrono::milliseconds>(
+					(Clock::now() - fader.upd) * fader.vel);
+			if (delta)
+			{
+				if (sgn(delta) !=
+						sgn((int)fader.tgt - ((int)state.slots[idx+1] + delta)))
+					state.slots[idx+1] = fader.tgt;
+				else
+					state.slots[idx+1] += delta;
+				fader.upd = Clock::now();
+				state.updated = 1;
+			}
+		}
+
+
+		if (state.updated || lastWrite + kMinRefr <= Clock::now())
+		{
+			state.updated = 0;
+			write(dev, state.slots, 513);
 			lastWrite = Clock::now();
 		}
 	}
@@ -145,14 +183,36 @@ bool continueLine(int fd, std::string& line, std::chrono::microseconds maxt)
 }
 
 
+int hexToNybble(char c)
+{
+	if ('0' <= c && c <= '9')
+		return c - '0';
+	if ('A' <= c && c <= 'F')
+		return c - 'A' + 10;
+	if ('a' <= c && c <= 'f')
+		return c - 'a' + 10;
+	return -1;
+}
+signed char& hexMkNybble(signed char& c)
+{
+	if ('0' <= c && c <= '9')
+		return c -= '0';
+	if ('A' <= c && c <= 'F')
+		return c -= 'A' - 10;
+	if ('a' <= c && c <= 'f')
+		return c -= 'a' - 10;
+	return c = -1;
+}
 
-std::string doCommand(const std::string& line, byte (&slots)[513])
+
+std::string doCommand(const std::string& line, State& state)
 {
 	std::istringstream ss{line};
 	switch ((char)ss.get())
 	{
 	case '#':
-		slots[0] = 0;
+		state.updated = 1;
+		state.slots[0] = 0;
 		for (size_t i = 2; i < 1026; i++)
 		{
 			signed char c;
@@ -161,29 +221,21 @@ std::string doCommand(const std::string& line, byte (&slots)[513])
 			{
 				i = (i >> 1) + (i & 1); //4 -> 2; 3 -> 2
 				while (i < 513)
-					slots[i++] = 0;
+					state.slots[i++] = 0;
 				break;
 			}
 
 
-			if ('0' <= c && c <= '9')
-				c -= '0';
-			else if ('a' <= c && c <= 'f')
-				c -= 'a' - 10;
-			else if ('A' <= c && c <= 'F')
-				c -= 'A' - 10;
-			else
-				c = -1;
-
-			if (c == -1)
+			if (hexMkNybble(c) == -1)
 				return "invalid character in frame command";
 			if (i & 1)
-				slots[i >> 1] |= (byte)c << 4;
+				state.slots[i >> 1] |= (byte)c << 4;
 			else
-				slots[i >> 1]  = c;
+				state.slots[i >> 1]  = c;
 		}
 		break;
 	case '@': {
+		state.updated = 1;
 		size_t i;
 		ss >> i;
 		++i <<= 1;
@@ -192,22 +244,45 @@ std::string doCommand(const std::string& line, byte (&slots)[513])
 			if (1026 <= i)
 				return "index too high";
 
-			if ('0' <= c && c <= '9')
-				c -= '0';
-			else if ('a' <= c && c <= 'f')
-				c -= 'a' - 10;
-			else if ('A' <= c && c <= 'F')
-				c -= 'A' - 10;
-			else
-				c = -1;
-
-			if (c == -1)
+			if (hexMkNybble(c) == -1)
 				return "invalid character in index command";
 			if (i & 1)
-				slots[i >> 1] |= (byte)c << 4;
+				state.slots[i >> 1] |= (byte)c << 4;
 			else
-				slots[i >> 1]  = c;
+				state.slots[i >> 1]  = c;
 		}
+	} break;
+	case '>': {
+		size_t i, d;
+		ss >> i >> d;
+
+		if (i >= 512)
+			return "invalid index";
+
+		auto& newFader = state.faders[i]
+			= State::Fader{ Clock::now(), 0, 0 };
+
+		signed char c;
+		ss >> c;
+		if (hexMkNybble(c) == -1)
+			return "invalid character in fade command";
+		newFader.tgt  = c;
+		ss >> c;
+		if (hexMkNybble(c) == -1)
+			return "invalid character in fade command";
+		newFader.tgt |= (byte)c << 4;
+
+		newFader.vel = newFader.tgt - state.slots[i+1];
+		if (newFader.vel == 0)
+			return ""; //TODO: error?
+
+		newFader.vel /= d;
+	} break;
+	case 'e': { //Echo
+		auto tty = new termios;
+		tcgetattr(0, tty);
+		tty->c_lflag ^= ECHO;
+		tcsetattr(0, TCSANOW, tty);
 	} break;
 	default:
 		return "unknown command";

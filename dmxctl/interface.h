@@ -49,6 +49,8 @@ namespace lsc
 			int min, max;
 		};
 
+
+
 		size_t chanid; /* Just this object's index in the vector.  Useful when
 											extracting references to these. */
 
@@ -80,6 +82,8 @@ namespace lsc
 		std::vector<const Channel*> operator[](const std::string&) const;
 		std::vector<Channel*> operator[](const Channel::TargetType&);
 		std::vector<const Channel*> operator[](const Channel::TargetType&) const;
+		Channel& operator[](size_t);
+		const Channel& operator[](size_t) const;
 
 		bool setValue(Channel::TargetType, const std::string&);
 		bool setValue(const std::string&, const std::string&);
@@ -110,6 +114,8 @@ namespace lsc
 
 		std::vector<Instrument*> operator[](const std::string& prefix);
 		std::vector<const Instrument*> operator[](const std::string& prefix) const;
+		Channel& operator[](size_t);
+		const Channel& operator[](size_t) const;
 
 		std::string checkScene(const std::string&) const;
 		void loadScene(const std::string&);
@@ -124,11 +130,14 @@ namespace lsc
 		float maxValue(Channel::TargetType);
 		float minValue(Channel::TargetType);
 
+		void setChannel(size_t, byte);
+		void fadeChannel(size_t, size_t mills, byte);
 		void writeOut();
 	public:
 		DmxCtl(const DmxCtl&) = delete;
 		DmxCtl(std::vector<std::string>);
 
+		//Takes device and instrument file
 		void execute(
 				const std::string& inst,
 				const std::vector<std::string>& args

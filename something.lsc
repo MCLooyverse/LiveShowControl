@@ -1,0 +1,3 @@
+load DmxCtl /dev/dmx0 instfile.yaml
+dmx.loadDark scene.yaml
+-> dmx.fadeTo 1.0 700ms

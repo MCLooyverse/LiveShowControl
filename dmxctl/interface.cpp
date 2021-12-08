@@ -5,6 +5,8 @@
 #include <cmath>
 #include <signal.h>
 
+//#include <iostream>
+
 
 namespace lsc
 {
@@ -73,6 +75,7 @@ namespace lsc
 								+ name + "\" in instrument \"" + instruments.back().name
 								+ "\"."
 							);
+
 					instruments.back().channels.emplace_back(
 							instruments.back().channels.size(), name, 0, Channel::generic, Unit{}, 0
 						);
@@ -89,11 +92,18 @@ namespace lsc
 										+ instruments.back().name
 									);
 
+						/*
 						instruments.back().channels.push_back(
 								*(occurances.front())
 							);
-						instruments.back().channels.back().chanid = instruments.back().channels.size()-1;
-						instruments.back().channels.back().valindex = idx;
+						*/
+						instruments.back().channels.emplace_back(
+								instruments.back().channels.size(), name, idx,
+								occurances.front()->target, occurances.front()->values,
+								0
+							);
+						//instruments.back().channels.back().chanid = instruments.back().channels.size()-1;
+						//instruments.back().channels.back().valindex = idx;
 					}
 					else
 						instruments.back().channels.emplace_back(
@@ -261,6 +271,10 @@ namespace lsc
 				out.push_back(&chan);
 		return out;
 	}
+	Channel& Instrument::operator[](size_t idx)
+	{ return channels[idx]; }
+	const Channel& Instrument::operator[](size_t idx) const
+	{ return channels[idx]; }
 
 
 	int hexToNybble(char c)
@@ -330,11 +344,11 @@ namespace lsc
 		}
 		else
 		{
-			/*
-			valbytes = (1 << selChannels.size()) - 1;
+			//*
+			valbytes = (1 << 8*chans.size()) - 1;
 			valbytes *= std::stod(val);
-			*/
-			valbytes = std::ldexp(std::stold(val), 8*chans.size()) - 1;
+			//*/
+			//valbytes = std::ldexp(std::stold(val), 8*chans.size()) - 1;
 		}
 
 		for (auto chan : chans)
@@ -369,11 +383,14 @@ namespace lsc
 			const std::vector<std::string>& args
 			)
 	{
+
+
 		std::string errorString = verify(inst, args);
 		if (errorString.size())
 			throw std::domain_error(
 					"[DmxCtl::execute (" + inst + ")] " + errorString
 				);
+
 		// All error-checking has been exported.
 
 
@@ -396,16 +413,12 @@ namespace lsc
 					);
 
 			loadScene(args[0]);
+			setValues(Channel::master, 1.0f);
+			writeOut();
+			for (auto& inst : instruments)
+			for (auto& chan : inst[Channel::master])
+				fadeChannel(inst.addr + chan->chanid, dur.count(), 0xFF);
 
-			float val = 0;
-			for (auto start = Clock::now(); val < 1.0f; )
-			{
-				val = (Clock::now() - start) / dur;
-				if (val > 1.0f)
-					val = 1.0f;
-				if (setValues(Channel::master, val))
-					writeOut();
-			}
 			return;
 		} //loadAndFade
 		else if (inst == "fadeTo")
@@ -432,42 +445,9 @@ namespace lsc
 						std::chrono::minutes{(std::chrono::minutes::rep)num}
 					);
 
-
-			float val = 0,
-						min = minValue(Channel::master),
-						max = maxValue(Channel::master);
-			if (min > fade)
-				for (auto start = Clock::now(); val != fade; )
-				{
-					val = (Clock::now() - start) / dur * (fade - max) + max;
-					if (val < fade)
-						val = fade;
-					if (minValues(Channel::master, val))
-						writeOut();
-				}
-			else if (max < fade)
-				for (auto start = Clock::now(); val != fade; )
-				{
-					val = (Clock::now() - start) / dur * (fade - min) + min;
-					if (val > fade)
-						val = fade;
-					if (maxValues(Channel::master, val))
-						writeOut();
-				}
-			else
-				for (auto start = Clock::now(); val != fade; )
-				{
-					val = (Clock::now() - start) / dur * (fade - max) + max;
-					if (val < fade)
-						val = fade;
-					bool change = minValues(Channel::master, val);
-					val = (Clock::now() - start) / dur * (fade - min) + min;
-					if (val > fade)
-						val = fade;
-					change = change || maxValues(Channel::master, val);
-					if (change)
-						writeOut();
-				}
+			for (auto& inst : instruments)
+			for (auto& chan : inst[Channel::master])
+				fadeChannel(inst.addr + chan->chanid, dur.count(), fade);
 		} //fadeTo
 		else if (inst == "dark")
 		{
@@ -491,7 +471,7 @@ namespace lsc
 			setValues(Channel::master, 0.0f);
 			writeOut();
 		}
-	}
+	} //execute
 
 
 	std::string DmxCtl::verify(
@@ -625,8 +605,9 @@ namespace lsc
 		for (auto& inst : instruments)
 		{
 			auto chans = inst[targ];
-			assert(chans.size() <= sizeof(severalBytes));
-			severalBytes bytes = std::ldexp(f, 8*chans.size()) - 1;
+			assert(chans.size() < sizeof(severalBytes));
+			severalBytes bytes = 1 << 8*chans.size();
+			--bytes *= f;
 
 			for (auto pchan : chans)
 			{
@@ -718,6 +699,37 @@ namespace lsc
 		}
 		return minVal;
 	}
+
+
+	void DmxCtl::setChannel(size_t idx, byte b)
+	{
+		constexpr char hexits[] = "0123456789ABCDEF";
+
+		(*this)[idx].value = b;
+		std::string msg = "@";
+		msg += std::to_string(idx);
+		msg += ' ';
+		msg += hexits[b & 15];
+		msg += hexits[b >> 4];
+		msg += '\n';
+		write(tochild, msg.c_str(), msg.size());
+	}
+	void DmxCtl::fadeChannel(size_t idx, size_t mills, byte b)
+	{
+		constexpr char hexits[] = "0123456789ABCDEF";
+
+		(*this)[idx].value = b;
+		std::string msg = ">";
+		msg += std::to_string(idx);
+		msg += ' ';
+		msg += std::to_string(mills);
+		msg += ' ';
+		msg += hexits[b & 15];
+		msg += hexits[b >> 4];
+		msg += '\n';
+		write(tochild, msg.c_str(), msg.size());
+	}
+
 	void DmxCtl::writeOut()
 	{
 		byte slots[512]{0};
@@ -752,6 +764,20 @@ namespace lsc
 			if (inst.name.starts_with(prefix))
 				out.push_back(&inst);
 		return out;
+	}
+	Channel& DmxCtl::operator[](size_t idx)
+	{
+		for (auto& inst : instruments)
+			if (inst.addr <= idx && idx < inst.addr + inst.channels.size())
+				return inst[idx - inst.addr];
+		throw std::domain_error("undefined channel"); //TODO: errmsg
+	}
+	const Channel& DmxCtl::operator[](size_t idx) const
+	{
+		for (auto& inst : instruments)
+			if (inst.addr <= idx && idx < inst.addr + inst.channels.size())
+				return inst[idx - inst.addr];
+		throw std::domain_error("undefined channel"); //TODO: errmsg
 	}
 
 
