@@ -99,6 +99,8 @@ int main(int argc, char** argv)
 	auto next = Clock::now();
 	for (bool running = 1; running; )
 	{
+		if (isp == instructions.end())
+			--isp;
 		//Make sure loop starts steadily, no matter how long each particular
 		//goround takes.
 		std::this_thread::sleep_until(next += tick);
