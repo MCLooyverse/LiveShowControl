@@ -1,7 +1,9 @@
 #include <iostream>
 #include <cctype>
 #include <yaml-cpp/yaml.h>
-#include <mcl/ttymanip.h>
+//#include <mcl/ttymanip.h>
+#include <termios.h>
+#include <unistd.h>
 #include <fstream>
 
 #include "dmxctl/interface.h"
@@ -44,14 +46,15 @@ struct Instruction
 std::vector<std::vector<std::string>> TokenizeScript(const std::string& filename);
 std::vector<Instruction> secondProcessing(const std::vector<std::vector<std::string>>& lines);
 
-
 std::map<std::string, lsc::Controller*> cons;
+
+termios oldSetting;
 
 void onInterrupt(int sig)
 {
 	for (auto& con : cons)
 		delete con.second;
-	mcl::tty::uninit();
+	tcsetattr(0, TCSANOW, &oldSetting);
 	exit(0);
 }
 
@@ -75,11 +78,20 @@ int main(int argc, char** argv)
 
 
 
-	mcl::tty::init(0);
+	//mcl::tty::init(0);
 
 
+	/*
 	pollfd* stdinPoll = new pollfd{0, POLLIN, 0};
 	std::stringstream msgbuf{""};
+	*/
+
+	auto tty = new termios;
+	tcgetattr(0, &oldSetting);
+	tcgetattr(0, tty);
+	tty->c_lflag &= ~(ECHO | ICANON);
+	tty->c_cc[VMIN]  = 0;
+	tty->c_cc[VTIME] = 0;
 
 	auto isp = instructions.begin();
 
@@ -90,10 +102,11 @@ int main(int argc, char** argv)
 		//Make sure loop starts steadily, no matter how long each particular
 		//goround takes.
 		std::this_thread::sleep_until(next += tick);
-		std::cout << "\r" AEC_ERASE_SE << isp->handler << "." << isp->command;
+		std::cout << "\r\x1B[K" << isp->handler << "." << isp->command;
+		std::cout.flush();
 
 		int lines = 0;
-		msgbuf << AEC_ERASE_SE;
+		//msgbuf << AEC_ERASE_SE;
 		running = isp != instructions.end();
 		/*
 		for (auto& p : pl.getPlaying())
@@ -157,9 +170,16 @@ int main(int argc, char** argv)
 		 */
 
 
-		if (poll(stdinPoll, 1, 0))
+		char c;
+		switch (read(0, &c, 1))
 		{
-			switch (getchar())
+		case 0:
+			break;
+		case -1:
+			std::cerr << "\nError in reading.\n";
+			return 2;
+		case 1:
+			switch (c)
 			{
 			case '\n':
 			case ' ':
@@ -197,6 +217,9 @@ int main(int argc, char** argv)
 			case 'r':
 				//TODO: reee
 				isp = instructions.begin();
+				break;
+			case 'q':
+				running = 0;
 				break;
 			default:
 				break;
