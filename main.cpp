@@ -68,6 +68,7 @@ void deleteCons()
 void resettty()
 {
 	tcsetattr(0, TCSANOW, &oldSetting);
+	std::cout << "\x1B[?25h";
 }
 
 
@@ -118,7 +119,9 @@ int main(int argc, char** argv)
 	tcsetattr(0, TCSANOW, tty);
 
 	auto isp = instructions.begin();
+	bool moved = 1;
 
+	std::cout << "\x1B[s\x1B[?25l"; //Save pos, and hide curs
 	const auto tick = 50ms;
 	auto next = Clock::now();
 	for (bool running = 1; running; )
@@ -128,8 +131,24 @@ int main(int argc, char** argv)
 		//Make sure loop starts steadily, no matter how long each particular
 		//goround takes.
 		std::this_thread::sleep_until(next += tick);
-		std::cout << "\r\x1B[K" << isp->handler << "." << isp->command;
-		std::cout.flush();
+		if (moved)
+		{
+			moved = 0;
+			std::cout << "\x1B[u\x1B[J";
+			for (auto i = instructions.begin(); i != instructions.end(); i++)
+			{
+				if (i->timing != Instruction::enter)
+					continue;
+
+				if (i == isp)
+					std::cout << "\x1B[33m> ";
+				std::cout << i->handler << "." << i->command;
+				if (i == isp)
+					std::cout << " <\x1B[m";
+				std::cout << '\n';
+			}
+			std::cout.flush();
+		}
 
 		int lines = 0;
 		//msgbuf << AEC_ERASE_SE;
@@ -213,6 +232,7 @@ int main(int argc, char** argv)
 				{
 					cons[isp->handler]->execute(isp->command, isp->args);
 					++isp;
+					moved = 1;
 				}
 				while (isp != instructions.end() && isp->timing != Instruction::enter)
 				{
@@ -224,6 +244,7 @@ int main(int argc, char** argv)
 					case Instruction::simul:
 						cons[isp->handler]->execute(isp->command, isp->args);
 						++isp;
+						moved = 1;
 						break;
 					}
 				}
@@ -233,16 +254,23 @@ int main(int argc, char** argv)
 			case 'b':
 			case 'k':
 				if (isp != instructions.begin())
+				{
 					--isp;
+					moved = 1;
+				}
 				break;
 			case 's':
 			case 'j':
 				if (isp != instructions.end())
+				{
 					++isp;
+					moved = 1;
+				}
 				break;
 			case 'r':
 				//TODO: reee
 				isp = instructions.begin();
+				moved = 1;
 				break;
 			case 'q':
 				running = 0;
