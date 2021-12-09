@@ -5,7 +5,7 @@
 #include <cmath>
 #include <signal.h>
 
-//#include <iostream>
+// #include <iostream>
 
 
 namespace lsc
@@ -413,7 +413,7 @@ namespace lsc
 					);
 
 			loadScene(args[0]);
-			setValues(Channel::master, 1.0f);
+			setValues(Channel::master, 0.0f);
 			writeOut();
 			for (auto& inst : instruments)
 			for (auto& chan : inst[Channel::master])
@@ -447,7 +447,8 @@ namespace lsc
 
 			for (auto& inst : instruments)
 			for (auto& chan : inst[Channel::master])
-				fadeChannel(inst.addr + chan->chanid, dur.count(), fade);
+				fadeChannel(inst.addr + chan->chanid, dur.count(), fade * 0xFF);
+			/* ^^^ not great ^^^ */
 		} //fadeTo
 		else if (inst == "dark")
 		{
@@ -471,6 +472,37 @@ namespace lsc
 			setValues(Channel::master, 0.0f);
 			writeOut();
 		}
+		else if (inst == "fadeInstTo")
+		{
+			float fade;
+			float num;
+			std::string unit;
+			std::istringstream strm{args[1]};
+			strm >> fade;
+
+			strm.clear();
+			strm.str(args[2]);
+			strm >> num >> unit;
+
+			std::chrono::milliseconds dur;
+			if (unit == "s")
+				dur = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::seconds{(std::chrono::seconds::rep)num}
+					);
+			else if (unit == "ms")
+				dur = std::chrono::milliseconds{(std::chrono::milliseconds::rep)num};
+			else if (unit == "m")
+				dur = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::minutes{(std::chrono::minutes::rep)num}
+					);
+
+			//std::clog << "Fading instrument " << args[0] << " to " <<
+			//	fade << " over " << dur.count() << "ms\n";
+			for (auto lp : (*this)[args[0]])
+			for (auto chan : (*lp)[Channel::master])
+				fadeChannel(lp->addr + chan->chanid, dur.count(), fade * 0xFF);
+			/* ^^^ Not great ^^^ */
+		} //fadeInstTo
 	} //execute
 
 
@@ -559,6 +591,27 @@ namespace lsc
 			if (errorString.size())
 				return "Invalid scene file: " + errorString;
 		}
+		else if (inst == "fadeInstTo")
+		{
+			if (args.size() != 3)
+				return "Expects an instrument, fade value, and duration.";
+			float fade;
+			float dur;
+			std::string unit;
+			std::istringstream strm{args[1]};
+			strm >> fade;
+			if (fade < 0 || fade > 1)
+				return "Fade value must be in [0, 1].";
+			strm.clear();
+			strm.str(args[2]);
+			strm >> dur >> unit;
+			if (dur < 0)
+				return "Negative duration not supported.";
+			if (unit != "s" &&
+					unit != "ms" &&
+					unit != "m")
+				return "Unrecognized unit \"" + unit + "\".";
+		} //fadeTo
 		else
 			return "Unknown command.";
 
@@ -727,6 +780,7 @@ namespace lsc
 		msg += hexits[b & 15];
 		msg += hexits[b >> 4];
 		msg += '\n';
+		//std::clog << '\n' << msg;
 		write(tochild, msg.c_str(), msg.size());
 	}
 

@@ -11,6 +11,7 @@ using Clock = std::chrono::steady_clock;
 #include <cstring>
 #include <filesystem>
 namespace fs = std::filesystem;
+#include <signal.h>
 
 
 
@@ -30,8 +31,9 @@ struct State
 	byte slots[513];
 	std::map<size_t, Fader> faders;
 	bool updated;
+	bool supressBadAddr;
 
-	State() : slots{0}, faders{}, updated{1} { }
+	State() : slots{0}, faders{}, updated{1}, supressBadAddr{1} { }
 };
 
 bool continueLine(int, std::string&, std::chrono::microseconds maxt = 5ms);
@@ -45,11 +47,21 @@ inline constexpr typename DT::rep numberOf(DF d)
 { return std::chrono::duration_cast<DT>(d).count(); }
 
 
+void onParentDeath(int sig)
+{
+	exit(0);
+}
 
 
 
 int main(int argc, char** argv)
 {
+	struct sigaction sa;
+	sa.sa_handler = onParentDeath;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGHUP, &sa, NULL);
+
 	if (argc != 2 || !fs::is_character_file(fs::path(argv[1])))
 	{
 		const char cerrstr[] = "needs one device argument\n";
@@ -119,7 +131,15 @@ int main(int argc, char** argv)
 		if (state.updated || lastWrite + kMinRefr <= Clock::now())
 		{
 			state.updated = 0;
-			write(dev, state.slots, 513);
+			int ok = write(dev, state.slots, 513);
+			if (ok == -1 && (errno != EFAULT || !state.supressBadAddr))
+			{
+				std::string errstr = std::to_string(errno);
+				errstr += ": ";
+				errstr += strerror(errno);
+				errstr += "\n";
+				write(2, errstr.c_str(), errstr.size());
+			}
 			lastWrite = Clock::now();
 		}
 	}
@@ -283,6 +303,9 @@ std::string doCommand(const std::string& line, State& state)
 		tcgetattr(0, tty);
 		tty->c_lflag ^= ECHO;
 		tcsetattr(0, TCSANOW, tty);
+	} break;
+	case 's': { //Supress dumb error
+		state.supressBadAddr = !state.supressBadAddr;
 	} break;
 	default:
 		return "unknown command";

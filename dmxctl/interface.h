@@ -44,9 +44,14 @@ namespace lsc
 		struct DiscreteValue {
 			size_t min, max;
 			std::string name;
+
+			DiscreteValue(size_t m, size_t M, std::string n)
+				: min{m}, max{M}, name{n} { }
 		};
 		struct Range {
 			int min, max;
+
+			Range(int m, int M) : min{m}, max{M} { }
 		};
 
 
@@ -68,6 +73,15 @@ namespace lsc
 
 		byte value;
 
+		Channel(size_t c, std::string n, size_t i, TargetType t, Unit u, byte v)
+			: chanid{c}, name{n}, valindex{i}, target{t}, values{u}, value{v} { }
+		Channel(size_t c, std::string n, size_t i, TargetType t, std::vector<DiscreteValue> u, byte v)
+			: chanid{c}, name{n}, valindex{i}, target{t}, values{u}, value{v} { }
+		Channel(size_t c, std::string n, size_t i, TargetType t, Range u, byte v)
+			: chanid{c}, name{n}, valindex{i}, target{t}, values{u}, value{v} { }
+		Channel(size_t c, std::string n, size_t i, TargetType t, std::variant<Unit, std::vector<DiscreteValue>, Range> u, byte v)
+			: chanid{c}, name{n}, valindex{i}, target{t}, values{u}, value{v} { }
+
 		int rangeIndex(const std::string&) const; //-1 on failure
 		size_t rangeMinimum(const std::string&) const;
 	};
@@ -77,6 +91,9 @@ namespace lsc
 		std::string name;
 		size_t addr;
 		std::vector<Channel> channels;
+
+		Instrument(std::string n, size_t a, std::vector<Channel> c)
+			: name{n}, addr{a}, channels{c} { }
 
 		std::vector<Channel*> operator[](const std::string&);
 		std::vector<const Channel*> operator[](const std::string&) const;

@@ -50,6 +50,7 @@ std::map<std::string, lsc::Controller*> cons;
 
 termios oldSetting;
 
+/*
 void onInterrupt(int sig)
 {
 	for (auto& con : cons)
@@ -57,10 +58,23 @@ void onInterrupt(int sig)
 	tcsetattr(0, TCSANOW, &oldSetting);
 	exit(0);
 }
+*/
+
+void deleteCons()
+{
+	for (auto& con : cons)
+		delete con.second;
+}
+void resettty()
+{
+	tcsetattr(0, TCSANOW, &oldSetting);
+}
 
 
 int main(int argc, char** argv)
 {
+	std::atexit(deleteCons);
+
 	if (argc != 2)
 	{
 		std::cerr << "bad args\n";
@@ -69,12 +83,19 @@ int main(int argc, char** argv)
 
 	auto lines = TokenizeScript(argv[1]);
 	auto instructions = secondProcessing(lines);
+	if (instructions.size() == 0)
+	{
+		std::cerr << "Give actual instructions.\n";
+		return 1;
+	}
 
+	/*
 	struct sigaction sa;
 	sa.sa_handler = onInterrupt;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, NULL);
+	*/
 
 
 
@@ -88,10 +109,13 @@ int main(int argc, char** argv)
 
 	auto tty = new termios;
 	tcgetattr(0, &oldSetting);
+	std::atexit(resettty);
+
 	tcgetattr(0, tty);
 	tty->c_lflag &= ~(ECHO | ICANON);
 	tty->c_cc[VMIN]  = 0;
 	tty->c_cc[VTIME] = 0;
+	tcsetattr(0, TCSANOW, tty);
 
 	auto isp = instructions.begin();
 
@@ -100,7 +124,7 @@ int main(int argc, char** argv)
 	for (bool running = 1; running; )
 	{
 		if (isp == instructions.end())
-			--isp;
+			isp = instructions.begin();
 		//Make sure loop starts steadily, no matter how long each particular
 		//goround takes.
 		std::this_thread::sleep_until(next += tick);
@@ -229,6 +253,8 @@ int main(int argc, char** argv)
 		}
 
 	}
+
+	std::cout << '\n';
 
 	return 0;
 }
