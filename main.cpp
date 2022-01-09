@@ -46,19 +46,19 @@ struct Instruction
 std::vector<std::vector<std::string>> TokenizeScript(const std::string& filename);
 std::vector<Instruction> secondProcessing(const std::vector<std::vector<std::string>>& lines);
 
-std::map<std::string, lsc::Controller*> cons;
+std::map<std::string, lsc::Controller*> cons{
+	{ "sys", new NullMod({}) }
+};
 
 termios oldSetting;
 
-/*
 void onInterrupt(int sig)
 {
-	for (auto& con : cons)
-		delete con.second;
-	tcsetattr(0, TCSANOW, &oldSetting);
+	//An interrupt here is just a user-requested
+	//exit.  Everything that "should" go in here
+	//should be `std::atexit`ed.
 	exit(0);
 }
-*/
 
 void deleteCons()
 {
@@ -90,13 +90,11 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	/*
 	struct sigaction sa;
 	sa.sa_handler = onInterrupt;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, NULL);
-	*/
 
 
 
@@ -135,7 +133,12 @@ int main(int argc, char** argv)
 		{
 			moved = 0;
 			std::cout << "\x1B[u\x1B[J";
-			for (auto i = instructions.begin(); i != instructions.end(); i++)
+			auto i = instructions.begin(), e = instructions.end();
+			if (isp - i > 4)
+				i = isp - 4;
+			if (e - i > 20)
+				e = i + 20;
+			for ( ; i != e; i++)
 			{
 				if (i->timing != Instruction::enter)
 					continue;
@@ -143,6 +146,9 @@ int main(int argc, char** argv)
 				if (i == isp)
 					std::cout << "\x1B[33m> ";
 				std::cout << i->handler << "." << i->command;
+				for (const auto& arg : i->args)
+					std::cout << ' ' << arg;
+
 				if (i == isp)
 					std::cout << " <\x1B[m";
 				std::cout << '\n';
@@ -230,7 +236,14 @@ int main(int argc, char** argv)
 			case ' ':
 				if (isp != instructions.end())
 				{
-					cons[isp->handler]->execute(isp->command, isp->args);
+					try {
+						cons[isp->handler]->execute(isp->command, isp->args);
+					} catch (std::domain_error e) {
+						std::cerr << e.what() << '\n';
+						return 2;
+					} catch (...) {
+						throw;
+					}
 					++isp;
 					moved = 1;
 				}
@@ -240,7 +253,7 @@ int main(int argc, char** argv)
 					{
 					case Instruction::after:
 						//TODO: make not rarted
-						std::this_thread::sleep_for(1s);
+						std::this_thread::sleep_for(1800ms);
 					case Instruction::simul:
 						cons[isp->handler]->execute(isp->command, isp->args);
 						++isp;
@@ -362,11 +375,12 @@ std::vector<Instruction> secondProcessing(const std::vector<std::vector<std::str
 	std::map<std::string, std::vector<std::string>> aliases;
 	for (auto line : lines)
 	{
-		if (aliases.count(line[0]))
+		bool prefix = line[0] == "&" || line[0] == "->";
+		if (aliases.count(line[prefix]))
 		{
-			auto b = aliases[line[0]].begin(), e = aliases[line[0]].end();
-			line.erase(line.begin());
-			line.insert(line.begin(), b, e);
+			auto b = aliases[line[prefix]].begin(), e = aliases[line[prefix]].end();
+			line.erase(line.begin()+prefix);
+			line.insert(line.begin()+prefix, b, e);
 		}
 
 		if (line[0] == "alias")

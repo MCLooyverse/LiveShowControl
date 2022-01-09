@@ -513,10 +513,16 @@ namespace lsc
 	{
 		if (inst == "loadAndFade")
 		{
+			/*
 			if (args.size() != 2 ||
 					!fs::is_regular_file(fs::path(args[0]))
 					)
 				return "Expects a file and a duration.";
+			*/
+			if (args.size() != 2)
+				return "Expects a file and a duration.";
+			if (!fs::is_regular_file(fs::path(args[0])))
+				return "Expected `" + args[0] + "` to be a filepath.";
 
 			std::string errorString = checkScene(args[0]);
 			if (errorString.size())
