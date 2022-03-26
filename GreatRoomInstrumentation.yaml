@@ -1,0 +1,91 @@
+# This is a sample DMX instrument config file -- in fact, the one used for the
+# We, Montana! Great Room.
+
+
+# Note, this is by no means meant to be an optimal setup -- it is rather a de
+# facto description; a holdover from when our lights were contolled from a slider
+# board.
+
+# The side in the name of a lighting instrument is which side it shines on (or
+# which side it shines better on, in the case of dynamic spotlights), not which
+# side the actual instrument is on.
+
+- name: General House Left
+  addr: 0                   # Addresses *are* 0-based in this file.
+  channels: &MAIN-LIGHTS-CHANNELS
+    - name: Master
+      target: master        # The controller knows about a few types -- this
+                            # one tells it how to fade the instrument on and off.
+    - name: Color[0]
+      target: color         # The controller knows about this so that RGB
+                            # colors may be given as such, without the writer
+                            # needing to reference specific channels.
+    - name: Color[1]
+    - name: Color[2]
+    - name: White
+      target: dimmer        # Generic.  At this time, I do not feel that a
+                            # special "white" value is worth it.
+    - name: Strobe
+      target: generic       # As generic as possible.  The controller knows
+                            # nothing about what this value means.  Also the
+                            # default.
+    # TODO: Add the remaining channels
+- name: General Middle
+  addr: 16
+  channels: *MAIN-LIGHTS-CHANNELS
+- name: General House Right
+  addr: 32
+  channels: *MAIN-LIGHTS-CHANNELS
+- name: General Center      # More lighting in the very center of the stage
+  addr: 48
+  channels: *MAIN-LIGHTS-CHANNELS
+
+- name: Flood House Right
+  addr: 64
+  channels: &FLOOD-CHANNELS
+    - name: Master
+      target: master
+    - name: Cool
+      target: dimmer
+    - name: Warm
+      target: dimmer
+    # TODO: Add the remaining channels
+- name: Flood House Left
+  addr: 80
+  channels: *FLOOD-CHANNELS
+
+- name: Spotlight House Right
+  addr: 165 #(11 - 1) * 16 + 5
+  channels: &SPOTLIGHT-CHANNELS
+    - name: Pan[1]  # Meaningful.  Controller will interpret as byte 1 of Pan
+      target: pan
+      values:
+        type: range   # Also the default if not given.
+        min: -300 # -300 degrees
+        max:  300 #  300 degrees
+        # TODO: Verify
+    - name: Pan[0]
+    - name: Tilt[1]
+      target: tilt
+      values:
+        min: -15 # -15 degrees
+        max: 190 # 190 degrees
+        # TODO: Verify
+    - name: Tilt[0]
+    - name: Color
+      target: color
+      values:
+        type: discrete
+        white: [ 0, 10 ]
+        # TODO: Find values
+    - name: Gobo
+      values:
+        type: discrete
+        circle: [ 0, 20 ]
+        # TODO: Find values
+    - name: Strobe
+    - name: Brightness
+      target: master
+- name: Spotlight House Left
+  addr: 181
+  channels: *SPOTLIGHT-CHANNELS

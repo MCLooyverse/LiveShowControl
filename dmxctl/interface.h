@@ -129,6 +129,8 @@ namespace lsc
 		int chid;
 
 
+		//Newly public
+	public:
 		std::vector<Instrument*> operator[](const std::string& prefix);
 		std::vector<const Instrument*> operator[](const std::string& prefix) const;
 		Channel& operator[](size_t);
@@ -149,8 +151,7 @@ namespace lsc
 
 		void setChannel(size_t, byte);
 		void fadeChannel(size_t, size_t mills, byte);
-		void writeOut();
-	public:
+	//public:
 		DmxCtl(const DmxCtl&) = delete;
 		DmxCtl(std::vector<std::string>);
 
@@ -168,6 +169,11 @@ namespace lsc
 		operator bool() const override;
 
 		~DmxCtl() override;
+
+
+
+		// Previously private.  Now for manual control.
+		void writeOut();
 	};
 
 }

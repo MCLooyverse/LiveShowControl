@@ -264,6 +264,7 @@ int main(int argc, char** argv)
 
 				break;
 			case '\b':
+			case '\x7F':
 			case 'b':
 			case 'k':
 				if (isp != instructions.begin())
