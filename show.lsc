@@ -1,0 +1,57 @@
+load DmxCtl /dev/dmx0 ./GreatRoomInstrumentation.yaml
+
+sys.title Welcome
+& dmx.loadDark scenes/center-spots.yaml
+-> dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+sys.title Stupid
+& dmx.loadDark scenes/middle.yaml
+& dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+
+sys.title "Got Jokes Welcome"
+& dmx.loadDark scenes/center-spots.yaml
+-> dmx.fadeTo 1.0 700ms
+
+sys.title "Got Jokes"
+& dmx.fadeTo 0.0 700ms
+-> dmx.loadDark scenes/jokes.yaml
+-> dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+
+sys.title "Shoe Shop"
+& dmx.loadDark scenes/middle.yaml
+& dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+
+sys.title "Password"
+& dmx.loadDark scenes/all.yaml
+& dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+
+sys.title "If"
+& dmx.loadDark scenes/middle.yaml
+& dmx.fadeTo 1.0 700ms
+
+dmx.fadeTo 0 700ms
+
+
+sys.title "Text"
+& dmx.loadDark scenes/text.yaml
+-> dmx.fadeInstTo "Spotlight House Right" 1.0 300ms
+
+dmx.fadeInstTo "Spotlight House Left" 1.0 300ms
+& dmx.fadeInstTo "Spotlight House Right" 0.0 300ms
+
+dmx.fadeInstTo "Spotlight House Right" 1.0 300ms
+& dmx.fadeInstTo "Spotlight House Left" 0.0 300ms
